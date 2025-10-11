@@ -1,0 +1,18 @@
+db/database.py
+
+views/home.py
+views/login.py
+views/dashboard.py
+views/vendas.py
+views/produtos.py
+
+run.py
+
+models/produto.py
+models/venda.py
+
+requirements.txt
+
+README.md
+
+pip install -r requirements.txt
