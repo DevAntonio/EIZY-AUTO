@@ -1,3 +1,4 @@
+# run.py
 import tkinter as tk
 import sys
 import os
@@ -24,7 +25,7 @@ class MainApplication(tk.Tk):
         init_db()
         self.title("Eizy Auto")
         self.geometry("1024x576")
-        self.resizable(False, False)
+        self.resizable(True, True)
 
         self.home_page = HomePage(self, self.show_login)
         self.login_page = LoginPage(self, self.show_home, self.show_dashboard)
@@ -47,17 +48,25 @@ class MainApplication(tk.Tk):
 
     def show_dashboard(self):
         if self._current_frame: self._current_frame.pack_forget()
+        # --- ATUALIZAÇÃO ---
+        # Chama a função de atualização de contagem antes de exibir o dashboard
+        self.dashboard_page.update_counts()
+        # -----------------
         self._current_frame = self.dashboard_page
         self._current_frame.pack(fill="both", expand=True)
 
     def show_produtos(self):
         if self._current_frame: self._current_frame.pack_forget()
         self._current_frame = self.produtos_page
+        # Atualiza a lista de produtos toda vez que a página é mostrada
+        self.produtos_page.load_products() 
         self._current_frame.pack(fill="both", expand=True)
 
     def show_vendas(self):
         if self._current_frame: self._current_frame.pack_forget()
         self._current_frame = self.vendas_page
+        # Atualiza a lista de vendas toda vez que a página é mostrada
+        self.vendas_page.load_sales() 
         self._current_frame.pack(fill="both", expand=True)
 
 if __name__ == "__main__":

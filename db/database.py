@@ -1,3 +1,4 @@
+# db/database.py
 import sqlite3
 import hashlib
 import os
@@ -112,9 +113,50 @@ def get_all_products():
 def get_product_list():
     """Retorna uma lista de produtos (id, nome, preco) para dropdowns."""
     conn = get_db_connection()
-    products = conn.execute("SELECT id_produto, nome, preco FROM produto WHERE estoque > 0 ORDER BY nome").fetchall()
+    # Garante que produtos sem estoque não apareçam na lista de vendas
+    products = conn.execute("SELECT id_produto, nome, preco, estoque FROM produto WHERE estoque > 0 ORDER BY nome").fetchall()
     conn.close()
     return products
+
+def update_product(id_produto, nome, descricao, preco, estoque):
+    """Atualiza um produto existente no banco de dados."""
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            """UPDATE produto 
+               SET nome = ?, descricao = ?, preco = ?, estoque = ?
+               WHERE id_produto = ?""",
+            (nome, descricao, preco, estoque, id_produto)
+        )
+        conn.commit()
+    except sqlite3.Error as e:
+        print(f"Erro ao atualizar produto: {e}")
+    finally:
+        conn.close()
+
+def delete_product(id_produto):
+    """Deleta um produto do banco de dados."""
+    conn = get_db_connection()
+    try:
+        # Futuramente, verificar se o produto está em alguma venda antes de deletar
+        conn.execute("DELETE FROM produto WHERE id_produto = ?", (id_produto,))
+        conn.commit()
+    except sqlite3.Error as e:
+        print(f"Erro ao deletar produto: {e}")
+    finally:
+        conn.close()
+
+def search_products(search_term):
+    """Busca produtos por nome ou descrição."""
+    conn = get_db_connection()
+    query = f"%{search_term}%"
+    products = conn.execute(
+        "SELECT id_produto, nome, descricao, preco, estoque FROM produto WHERE nome LIKE ? OR descricao LIKE ? ORDER BY nome", 
+        (query, query)
+    ).fetchall()
+    conn.close()
+    return products
+
 
 # --- Funções de Venda ---
 def add_sale(cliente_nome, valor_total, items):
@@ -122,12 +164,23 @@ def add_sale(cliente_nome, valor_total, items):
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
+        
+        # Verifica o estoque antes de iniciar a transação
+        for item in items:
+            cursor.execute("SELECT estoque FROM produto WHERE id_produto = ?", (item['id_produto'],))
+            result = cursor.fetchone()
+            if result is None or result['estoque'] < item['quantidade']:
+                # Se o produto não existe ou não tem estoque, cancela
+                raise sqlite3.Error(f"Estoque insuficiente para o produto ID {item['id_produto']}.")
+
+        # Insere a venda
         cursor.execute(
             "INSERT INTO venda (cliente_nome, valor_total, status, data_venda) VALUES (?, ?, ?, ?)",
             (cliente_nome, valor_total, True, date.today())
         )
         id_venda = cursor.lastrowid
 
+        # Insere os itens da venda e atualiza o estoque
         for item in items:
             cursor.execute(
                 """INSERT INTO venda_item (id_venda, id_produto, vendedor_email, quantidade, preco_unitario, subtotal)
@@ -138,9 +191,11 @@ def add_sale(cliente_nome, valor_total, items):
             cursor.execute("UPDATE produto SET estoque = estoque - ? WHERE id_produto = ?", (item['quantidade'], item['id_produto']))
 
         conn.commit()
+        return True # Indica sucesso
     except sqlite3.Error as e:
         conn.rollback()
         print(f"Erro ao adicionar venda: {e}")
+        return False # Indica falha
     finally:
         conn.close()
 
@@ -161,4 +216,31 @@ def get_all_sales():
     sales = conn.execute(query).fetchall()
     conn.close()
     return sales
+
+# --- Funções de Contagem (Dashboard) ---
+
+def get_total_products_count():
+    """Retorna o número total de produtos cadastrados."""
+    conn = get_db_connection()
+    try:
+        count = conn.execute("SELECT COUNT(*) FROM produto").fetchone()[0]
+        return count
+    except sqlite3.Error as e:
+        print(f"Erro ao contar produtos: {e}")
+        return 0
+    finally:
+        conn.close()
+
+def get_total_sales_count():
+    """Retorna o número total de vendas (itens de venda) registradas."""
+    conn = get_db_connection()
+    try:
+        # Isso conta o total de itens vendidos, não o número de vendas únicas
+        count = conn.execute("SELECT COUNT(*) FROM venda_item").fetchone()[0]
+        return count
+    except sqlite3.Error as e:
+        print(f"Erro ao contar vendas: {e}")
+        return 0
+    finally:
+        conn.close()
 
